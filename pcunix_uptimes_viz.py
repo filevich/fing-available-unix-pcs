@@ -122,10 +122,7 @@ def plot_uptime_heatmap(csv_files):
 
 # Hardcoded list of CSV files
 csv_files_to_plot = [
-    '/tmp/pcunix_nodes_reachability_20250607_185820.csv',
-    '/tmp/pcunix_nodes_reachability_20250607_190750.csv',
-    '/tmp/pcunix_nodes_reachability_20250607_193422.csv',
-    '/tmp/pcunix_nodes_reachability_20250607_202154.csv'
+    '/tmp/pcunix_nodes_reachability_20250621_190323.csv',
 ]
 
 plot_uptime_heatmap(csv_files_to_plot)

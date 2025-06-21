@@ -54,16 +54,19 @@ for i in $(seq $START_NUM $END_NUM); do
         # --- SSH to gather system info ---
         # Use StrictHostKeyChecking=no and UserKnownHostsFile=/dev/null to bypass host key verification
         SSH_OUTPUT=$(timeout $SSH_TIMEOUT ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=1 -o BatchMode=yes "$HOSTNAME" "
+            # Set locale to C to ensure consistent number formatting
+            export LC_ALL=C
+
             # Gather CPU info using lscpu
             LSCPU_OUTPUT=\$(lscpu)
-            CPU_NAME=\$(echo \"\$LSCPU_OUTPUT\" | grep 'Model name' | awk -F': ' '{print \$2}' | tr -d ',' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*\$//')
+            CPU_NAME=\$(echo \"\$LSCPU_OUTPUT\" | grep 'Model name' | awk -F': ' '{print \$2}' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*\$//')
             CORES_PER_SOCKET=\$(echo \"\$LSCPU_OUTPUT\" | grep 'Core(s) per socket' | awk '{print \$4}')
             TOTAL_CPUS=\$(echo \"\$LSCPU_OUTPUT\" | grep '^CPU(s):' | awk '{print \$2}')
 
             # Gather RAM info using free -h
             FREE_OUTPUT=\$(free -h | grep Mem:)
-            TOTAL_RAM=\$(echo \"\$FREE_OUTPUT\" | awk '{print \$2}' | tr -d 'Gi')
-            AVAILABLE_RAM=\$(echo \"\$FREE_OUTPUT\" | awk '{print \$7}' | tr -d 'Gi')
+            TOTAL_RAM=\$(echo \"\$FREE_OUTPUT\" | awk '{print \$2}' | tr -d 'Gi' | sed 's/,/./')
+            AVAILABLE_RAM=\$(echo \"\$FREE_OUTPUT\" | awk '{print \$7}' | tr -d 'Gi' | sed 's/,/./')
 
             # Output in a format that's easy to parse
             echo \"CPU_NAME:\$CPU_NAME\"

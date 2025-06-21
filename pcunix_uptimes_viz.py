@@ -16,8 +16,9 @@ def load_and_validate_csvs(csv_files):
     for file_path in csv_files:
         try:
             df = pd.read_csv(file_path)
-            if 'Node_ID' not in df.columns or 'Reachable' not in df.columns:
-                print(f"Warning: Skipping {file_path}. Missing 'Node_ID' or 'Reachable' column.")
+            required_columns = ['Node_ID', 'Reachable', 'CPU_Name', 'Cores_Per_Socket', 'Total_CPUs', 'Total_RAM_GiB']
+            if not all(col in df.columns for col in required_columns):
+                print(f"Warning: Skipping {file_path}. Missing one or more required columns: {required_columns}.")
                 continue
             file_name_without_ext = os.path.splitext(os.path.basename(file_path))[0]
             df['Scan_Label'] = file_name_without_ext
@@ -95,30 +96,76 @@ def create_heatmap(pivot_table):
     plt.tight_layout()
     return fig
 
-def analyze_latest_scan(pivot_table):
-    """Analyze and print statistics for the latest scan."""
+def format_node_ranges(node_ids):
+    """Convert a list of node IDs into a compact string with unified ranges."""
+    if not node_ids:
+        return ""
+    node_ids = sorted(node_ids)
+    ranges = []
+    start = node_ids[0]
+    prev = node_ids[0]
+
+    for curr in node_ids[1:] + [None]:
+        if curr is None or curr > prev + 1:
+            if start == prev:
+                ranges.append(str(start))
+            else:
+                ranges.append(f"{start}-{prev}")
+            if curr is not None:
+                start = curr
+        prev = curr if curr is not None else prev
+
+    return ", ".join(ranges)
+
+def analyze_latest_scan(pivot_table, latest_data):
+    """Analyze and print statistics for the latest scan, including grouped nodes by CPU and RAM."""
     last_scan = pivot_table.iloc[:, -1]
     up_nodes_percentage = (last_scan == 1).mean() * 100
     print(f"\nPercentage of nodes up in latest scan: {up_nodes_percentage:.2f}%")
     up_nodes = last_scan[last_scan == 1].index.tolist()
     print(f"Nodes that are up in latest scan: {up_nodes}")
 
+    # Group reachable nodes by CPU and RAM configuration
+    if up_nodes:
+        up_nodes_df = latest_data[latest_data['Node_ID'].isin(up_nodes)][
+            ['Node_ID', 'CPU_Name', 'Cores_Per_Socket', 'Total_CPUs', 'Total_RAM_GiB']
+        ]
+        grouped = up_nodes_df.groupby(
+            ['CPU_Name', 'Cores_Per_Socket', 'Total_CPUs', 'Total_RAM_GiB']
+        ).agg({'Node_ID': list}).reset_index()
+
+        print("\nGrouped Reachable Nodes by CPU and RAM Configuration:")
+        print("-" * 60)
+        print(f"{'Number of Nodes':<15} {'CPU':<20} {'Physical Cores':<15} {'Logical Threads':<15} {'DRAM (GiB)':<10} {'Node IDs'}")
+        print("-" * 60)
+
+        for _, row in grouped.iterrows():
+            num_nodes = len(row['Node_ID'])
+            cpu_name = row['CPU_Name']
+            cores = row['Cores_Per_Socket']
+            threads = row['Total_CPUs']
+            ram = row['Total_RAM_GiB']
+            node_ids = format_node_ranges(row['Node_ID'])
+            print(f"{num_nodes:<15} {cpu_name:<20} {cores:<15} {threads:<15} {ram:<10} {node_ids}")
+
 def plot_uptime_heatmap(csv_files):
     """
     Reads CSV files and plots a heatmap visualizing node uptime evolution.
 
     Args:
-        csv_files (list): Paths to CSV files with 'Node_ID' and 'Reachable' columns.
+        csv_files (list): Paths to CSV files with 'Node_ID', 'Reachable', 'CPU_Name',
+                          'Cores_Per_Socket', 'Total_CPUs', and 'Total_RAM_GiB' columns.
     """
     all_data, file_labels = load_and_validate_csvs(csv_files)
     if all_data is None or file_labels is None:
         return
 
     pivot_table = process_data(all_data, file_labels)
+    latest_data = all_data[-1]  # Use the latest CSV file for grouping
     fig = create_heatmap(pivot_table)
     plt.savefig('/tmp/example.png', dpi=300, bbox_inches='tight')
     plt.show()
-    analyze_latest_scan(pivot_table)
+    analyze_latest_scan(pivot_table, latest_data)
 
 # Hardcoded list of CSV files
 csv_files_to_plot = [

@@ -3,6 +3,23 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import os
 import numpy as np
+import argparse
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Plot node uptime heatmap and analyze reachable nodes.")
+    parser.add_argument(
+        "csv_files",
+        nargs="+",
+        help="Paths to CSV files with node reachability data."
+    )
+    parser.add_argument(
+        "--format",
+        choices=["plain", "md", "markdown"],
+        default="plain",
+        help="Output format for the grouped nodes table: 'plain' or 'md'/'markdown' (default: plain)"
+    )
+    return parser.parse_args()
 
 def load_and_validate_csvs(csv_files):
     """Load and validate CSV files, returning combined data and file labels."""
@@ -117,7 +134,7 @@ def format_node_ranges(node_ids):
 
     return ", ".join(ranges)
 
-def analyze_latest_scan(pivot_table, latest_data):
+def analyze_latest_scan(pivot_table, latest_data, output_format):
     """Analyze and print statistics for the latest scan, including grouped nodes by CPU and RAM."""
     last_scan = pivot_table.iloc[:, -1]
     up_nodes_percentage = (last_scan == 1).mean() * 100
@@ -135,27 +152,44 @@ def analyze_latest_scan(pivot_table, latest_data):
         ).agg({'Node_ID': list}).reset_index()
 
         print("\nGrouped Reachable Nodes by CPU and RAM Configuration:")
-        print("-" * 60)
-        print(f"{'Number of Nodes':<15} {'CPU':<20} {'Physical Cores':<15} {'Logical Threads':<15} {'DRAM (GiB)':<10} {'Node IDs'}")
-        print("-" * 60)
+        
+        if output_format in ["md", "markdown"]:
+            # Markdown table header
+            print("| Number of Nodes | CPU | Physical Cores | Logical Threads | DRAM (GiB) | Node IDs |")
+            print("|-----------------|-----|----------------|-----------------|------------|----------|")
+            
+            # Markdown table rows
+            for _, row in grouped.iterrows():
+                num_nodes = len(row['Node_ID'])
+                cpu_name = row['CPU_Name'].replace("|", "\\|")  # Escape pipes for Markdown
+                cores = row['Cores_Per_Socket']
+                threads = row['Total_CPUs']
+                ram = row['Total_RAM_GiB']
+                node_ids = format_node_ranges(row['Node_ID']).replace("|", "\\|")  # Escape pipes
+                print(f"| {num_nodes} | {cpu_name} | {cores} | {threads} | {ram} | {node_ids} |")
+        else:
+            # Plain text table
+            print("-" * 60)
+            print(f"{'Number of Nodes':<15} {'CPU':<20} {'Physical Cores':<15} {'Logical Threads':<15} {'DRAM (GiB)':<10} {'Node IDs'}")
+            print("-" * 60)
 
-        for _, row in grouped.iterrows():
-            num_nodes = len(row['Node_ID'])
-            cpu_name = row['CPU_Name']
-            cores = row['Cores_Per_Socket']
-            threads = row['Total_CPUs']
-            ram = row['Total_RAM_GiB']
-            node_ids = format_node_ranges(row['Node_ID'])
-            print(f"{num_nodes:<15} {cpu_name:<20} {cores:<15} {threads:<15} {ram:<10} {node_ids}")
+            for _, row in grouped.iterrows():
+                num_nodes = len(row['Node_ID'])
+                cpu_name = row['CPU_Name']
+                cores = row['Cores_Per_Socket']
+                threads = row['Total_CPUs']
+                ram = row['Total_RAM_GiB']
+                node_ids = format_node_ranges(row['Node_ID'])
+                print(f"{num_nodes:<15} {cpu_name:<20} {cores:<15} {threads:<15} {ram:<10} {node_ids}")
 
-def plot_uptime_heatmap(csv_files):
+def plot_uptime_heatmap():
     """
     Reads CSV files and plots a heatmap visualizing node uptime evolution.
-
-    Args:
-        csv_files (list): Paths to CSV files with 'Node_ID', 'Reachable', 'CPU_Name',
-                          'Cores_Per_Socket', 'Total_CPUs', and 'Total_RAM_GiB' columns.
     """
+    args = parse_arguments()
+    csv_files = args.csv_files
+    output_format = args.format
+
     all_data, file_labels = load_and_validate_csvs(csv_files)
     if all_data is None or file_labels is None:
         return
@@ -165,11 +199,7 @@ def plot_uptime_heatmap(csv_files):
     fig = create_heatmap(pivot_table)
     plt.savefig('/tmp/example.png', dpi=300, bbox_inches='tight')
     plt.show()
-    analyze_latest_scan(pivot_table, latest_data)
+    analyze_latest_scan(pivot_table, latest_data, output_format)
 
-# Hardcoded list of CSV files
-csv_files_to_plot = [
-    '/tmp/pcunix_nodes_reachability_20250621_190323.csv',
-]
-
-plot_uptime_heatmap(csv_files_to_plot)
+if __name__ == "__main__":
+    plot_uptime_heatmap()
